@@ -136,6 +136,7 @@ class LockManager:
             data = self._lock_unlock_parse(body)
             token, result = self._lock_unlock_create(uri, 'unknown', depth, data)
 
+            print "LOCK*"*80
             if result:
                 self.send_body(result, '207', 'Error', 'Error',
                                 'text/xml; charset="utf-8"')

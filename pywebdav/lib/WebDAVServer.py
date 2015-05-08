@@ -61,6 +61,9 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
         """ send a body in one part """
         log.debug("Use send_body method")
 
+        print "KUBA:send_body:",code,msg,DATA
+
+
         self.send_response(code, message=msg)
         self.send_header("Connection", "close")
         self.send_header("Accept-Ranges", "bytes")
@@ -109,7 +112,7 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
                     self.wfile.write(DATA.read())
 
     def send_body_chunks_if_http11(self, DATA, code, msg=None, desc=None,
-                                   ctype='text/xml; encoding="utf-8"',
+                                   ctype='application/xml; charset=utf-8',
                                    headers={}):
         if (self.request_version == 'HTTP/1.0' or
             not self._config.DAV.getboolean('chunked_http_response')):
@@ -118,12 +121,14 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
             self.send_body_chunks(DATA, code, msg, desc, ctype, headers)
 
     def send_body_chunks(self, DATA, code, msg=None, desc=None,
-                         ctype='text/xml"', headers={}):
+                         ctype='application/xml"', headers={}):
         """ send a body in chunks """
+
+        print "KUBA:send_body_chunks:",code,msg,DATA
 
         self.responses[207] = (msg, desc)
         self.send_response(code, message=msg)
-        self.send_header("Content-type", ctype)
+        self.send_header("Content-Type", ctype)
         self.send_header("Transfer-Encoding", "chunked")
         self.send_header('Date', rfc1123_date())
 
@@ -148,7 +153,7 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
                 self.send_header('Content-Encoding', 'gzip')
 
             self.send_header('Content-Length', len(DATA))
-            self.send_header('Content-Type', ctype)
+            #self.send_header('Content-Type', ctype) # this leads to duplicate Content-Type header which 1) is useless, 2) incorrect(?), 3) confuses the owncloud sync client
 
         else:
             self.send_header('Content-Length', 0)
@@ -232,6 +237,7 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
         except DAV_NotFound:
             content_type = "application/octet-stream"
 
+
         range = None
         status_code = 200
         if 'Range' in self.headers:
@@ -312,8 +318,19 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
         uri = urlparse.urljoin(self.get_baseuri(dc), self.path)
         uri = urllib.unquote(uri)
 
+        print "do_PROPFIND",self.path,uri
+
+        #print 'KUBA PROPFIND',self.headers
+        #print 'KUBA PROPFIND',body
+
+        depth = self.headers.get('Depth', 'infinity')
+
+        # let's ban the infinity depth
+        if depth == 'infinity':
+            return self.send_status(405) # MethodNotAllowed
+
         try:
-            pf = PROPFIND(uri, dc, self.headers.get('Depth', 'infinity'), body)
+            pf = PROPFIND(uri, dc, depth, body, self.get_baseuri(dc))
         except ExpatError:
             # parse error
             return self.send_status(400)
@@ -597,6 +614,32 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
             except DAV_Error, (ec, dd):
                 return self.send_status(ec)
 
+            # get the ETAG of the already existing file on the server
+            try:
+                etag = dc.get_prop(uri, "DAV:", "getetag")
+                headers['ETag'] = etag
+            except:
+                pass
+
+            if self.headers.has_key('X-OC-Mtime'):
+                import os
+                mtime=int(self.headers['X-OC-Mtime'])
+                fn = dc.uri2local(uri)
+                atime=os.stat(fn).st_atime
+                print 'setting utime:',fn,(atime,mtime)
+                os.utime(fn, (atime,mtime))
+
+                dn = os.path.dirname(fn)
+                while dn != dc.directory:
+                    print 'setting directory utime:',dn
+                    os.utime(dn,None)
+                    dn = os.path.dirname(dn)
+
+                headers['X-OC-Mtime']='accepted'
+
+
+            headers['OC-FileId'] = dc.get_prop(uri,'http://owncloud.org/ns','id')
+                
             self.send_body(None, 201, 'Created', '', headers=headers)
             self.log_request(201)
 
@@ -703,7 +746,7 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
         if res:
             self.send_body_chunks_if_http11(res, 207, self.responses[207][0],
                                             self.responses[207][1],
-                                            ctype='text/xml; charset="utf-8"')
+                                            ctype='application/xml; charset=utf-8')
         else:
             self.send_status(result_code)
 
@@ -711,7 +754,7 @@ class DAVRequestHandler(AuthServer.AuthRequestHandler, LockManager):
         """ Dummy method which lets all users in """
         return 1
 
-    def send_status(self, code=200, mediatype='text/xml;  charset="utf-8"',
+    def send_status(self, code=200, mediatype='application/xml;  charset=utf-8',
                     msg=None, body=None):
 
         if not msg:

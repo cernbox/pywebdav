@@ -10,7 +10,7 @@ This is an example implementation of a DAVserver using the DAV package.
 import getopt, sys, os
 import logging
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.DEBUG)
 log = logging.getLogger('pywebdav')
 
 from BaseHTTPServer import HTTPServer
@@ -91,9 +91,14 @@ def runserver(
         log.info('Using %s as base url for PROPFIND requests' % handler._config.DAV.baseurl)
     handler.IFACE_CLASS.baseurl = handler._config.DAV.baseurl
 
+
     # initialize server on specified port
     runner = server( (host, port), handler )
     print('Listening on %s (%i)' % (host, port))
+
+
+
+
 
     try:
         runner.serve_forever()

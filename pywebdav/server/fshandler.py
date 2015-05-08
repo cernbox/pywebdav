@@ -95,17 +95,26 @@ class FilesystemHandler(dav_interface):
         filename=os.path.normpath(filename)
         return filename
 
-    def local2uri(self,filename):
+    def local2uri(self,filename,baseuri=None):
         """ map local filename to self.baseuri """
 
         pnum=len(split(self.directory.replace("\\","/"),"/"))
         parts=split(filename.replace("\\","/"),"/")[pnum:]
         sparts="/"+joinfields(parts,"/")
-        uri=urlparse.urljoin(self.baseuri,sparts)
+
+        # we may need to pass the baseuri in the context of the request to exactly match the host href in the response as specified in the request
+
+        # this feature avoids having mixed hosts in the PROPFIND response
+        # disable this feature to emulate the bug
+        # https://github.com/owncloud/client/issues/3176
+
+        if baseuri is None: 
+            baseuri = self.baseuri
+        uri=urlparse.urljoin(baseuri,sparts)
         return uri
 
 
-    def get_childs(self, uri, filter=None):
+    def get_childs(self, uri, filter=None, baseuri=None):
         """ return the child objects as self.baseuris for the given URI """
 
         fileloc=self.uri2local(uri)
@@ -120,7 +129,8 @@ class FilesystemHandler(dav_interface):
 
                 for file in files:
                     newloc=os.path.join(fileloc,file)
-                    filelist.append(self.local2uri(newloc))
+                    print "$$$$$",self.local2uri(newloc,baseuri),baseuri
+                    filelist.append(self.local2uri(newloc,baseuri))
 
                 log.info('get_childs: Childs %s' % filelist)
 
@@ -212,6 +222,18 @@ class FilesystemHandler(dav_interface):
             date=s[9]
             return date
 
+        raise DAV_NotFound
+
+    def _get_dav_getetag(self,uri):
+        """ return OC etag """
+        return '"'+str(self.get_lastmodified(uri))+'"'
+
+
+    def _get_oc_id(self,uri):
+        """ return OC FileId """
+        path=self.uri2local(uri)
+        if os.path.exists(path):
+            return str(os.stat(path).st_ino)
         raise DAV_NotFound
 
     def _get_dav_getcontenttype(self,uri):

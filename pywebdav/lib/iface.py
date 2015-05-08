@@ -31,7 +31,7 @@ class dav_interface:
                      'resourcetype',
                      'source',
                      'supportedlock'),
-           "NS2" : ("p1","p2")
+           "http://owncloud.org/ns" : ("id")
            }
 
     # here we define which methods handle which namespace
@@ -39,7 +39,7 @@ class dav_interface:
     # the method prefix
     # e.g. for DAV:getcontenttype we call dav_getcontenttype()
     M_NS={"DAV:" : "_get_dav",
-          "NS2"  : "ns2" }
+          "http://owncloud.org/ns"  : "_get_oc" }
 
     def get_propnames(self,uri):
         """ return the property names allowed for the given URI

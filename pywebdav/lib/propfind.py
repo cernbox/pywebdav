@@ -27,7 +27,7 @@ class PROPFIND:
 
     """
 
-    def __init__(self, uri, dataclass, depth, body):
+    def __init__(self, uri, dataclass, depth, body, baseuri):
         self.request_type = None
         self.nsmap = {}
         self.proplist = {}
@@ -36,6 +36,8 @@ class PROPFIND:
         self._depth = str(depth)
         self._uri = uri.rstrip('/')
         self._has_body = None   # did we parse a body?
+        print 'SETTING PROPFIND BASEURI',baseuri, uri
+        self._baseuri = baseuri
 
         if dataclass.verbose:
             log.info('PROPFIND: Depth is %s, URI is %s' % (depth, uri))
@@ -101,18 +103,20 @@ class PROPFIND:
             re = self.mk_propname_response(self._uri, pnames, doc)
             ms.appendChild(re)
 
-            for newuri in dc.get_childs(self._uri):
+            for newuri in dc.get_childs(self._uri,baseuri=self._baseuri):
                 pnames = dc.get_propnames(newuri)
                 re = self.mk_propname_response(newuri, pnames, doc)
                 ms.appendChild(re)
         elif self._depth == 'infinity':
+            #print "INFINITY REQUESTED: NOT IMPLEMENTED"
+            #raise NotImplemented
             uri_list = [self._uri]
             while uri_list:
                 uri = uri_list.pop()
                 pnames = dc.get_propnames(uri)
                 re = self.mk_propname_response(uri, pnames, doc)
                 ms.appendChild(re)
-                uri_childs = self._dataclass.get_childs(uri)
+                uri_childs = self._dataclass.get_childs(uri,baseuri=self._baseuri)
                 if uri_childs:
                     uri_list.extend(uri_childs)
 
@@ -162,21 +166,25 @@ class PROPFIND:
 
         elif self._depth == "1":
             gp, bp = self.get_propvalues(self._uri)
+            print '&&&&',self._uri, self._baseuri
             res = self.mk_prop_response(self._uri, gp, bp, doc)
             ms.appendChild(res)
 
-            for newuri in self._dataclass.get_childs(self._uri):
+            for newuri in self._dataclass.get_childs(self._uri,baseuri=self._baseuri):
                 gp, bp = self.get_propvalues(newuri)
+                print '&&&&---',newuri, self._baseuri
                 res = self.mk_prop_response(newuri, gp, bp, doc)
                 ms.appendChild(res)
         elif self._depth == 'infinity':
+            #print "INFINITY REQUESTED: NOT IMPLEMENTED"
+            #raise NotImplemented
             uri_list = [self._uri]
             while uri_list:
                 uri = uri_list.pop()
                 gp, bp = self.get_propvalues(uri)
                 res = self.mk_prop_response(uri, gp, bp, doc)
                 ms.appendChild(res)
-                uri_childs = self._dataclass.get_childs(uri)
+                uri_childs = self._dataclass.get_childs(uri,baseuri=self._baseuri)
                 if uri_childs:
                     uri_list.extend(uri_childs)
 
@@ -199,9 +207,11 @@ class PROPFIND:
         fileloc = uparts[2]
         href = doc.createElement("D:href")
 
-        huri = doc.createTextNode(uparts[0] + '://' +
-                                  '/'.join(uparts[1:2]) +
-                                  urllib.quote(fileloc))
+        huri_text=uparts[0] + '://' + '/'.join(uparts[1:2]) + urllib.quote(fileloc)
+        huri = doc.createTextNode(huri_text)
+
+        print '***',huri_text
+
         href.appendChild(huri)
         re.appendChild(href)
 
@@ -241,17 +251,21 @@ class PROPFIND:
                 re.setAttribute("xmlns:ns" + str(nsnum), nsname)
             nsnum += 1
 
+        print 'URI BEFORE',uri
         if self._dataclass.baseurl:
             uri = self._dataclass.baseurl + '/' + '/'.join(uri.split('/')[3:])
+        print 'URI AFTER',uri
 
         # write href information
         uparts = urlparse.urlparse(uri)
         fileloc = uparts[2]
         href = doc.createElement("D:href")
 
-        huri = doc.createTextNode(uparts[0] + '://' +
-                                  '/'.join(uparts[1:2]) +
-                                  urllib.quote(fileloc))
+        huri_text=uparts[0] + '://' + '/'.join(uparts[1:2]) + urllib.quote(fileloc)
+        huri = doc.createTextNode(huri_text)
+
+        print '#### huri',huri_text
+
         href.appendChild(huri)
         re.appendChild(href)
 
@@ -291,6 +305,9 @@ class PROPFIND:
         s.appendChild(t)
         ps.appendChild(s)
         re.appendChild(ps)
+
+        # SKIP BAD PROPS ALTOGETHER...
+        #return re
 
         # now write the errors!
         if len(bad_props.items()):
